@@ -1,6 +1,9 @@
 import httplib2
 import os
 from bs4 import BeautifulSoup
+import bs4.element
+import re
+import string
 
 from apiclient import discovery, errors
 from oauth2client import client
@@ -17,7 +20,7 @@ except ImportError:
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/gmail-python-quickstart.json
-SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
+SCOPES = ('https://www.googleapis.com/auth/gmail.readonly', "https://www.googleapis.com/auth/gmail.modify")
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Gmail API Python Quickstart'
 
@@ -99,7 +102,7 @@ def get_mime_message(service, user_id, msg_id):
     except errors.HttpError as error:
         print('An error occurred: %s' % error)
 
-
+hw_assigments = {}
 def main():
     """Shows basic usage of the Gmail API.
 
@@ -113,18 +116,37 @@ def main():
     results = service.users().messages().list(userId="me", q="from:(system@schoolloop.com)").execute()
     ids = results.get('messages', [])
 
-    message = get_message(service, 'me', ids[0]['id'])
+    message = get_message(service, 'me', ids[1]['id'])
     # print(message['payload']['parts'][1]["body"]["data"])
     msg_html = base64.urlsafe_b64decode(message['payload']['parts'][1]["body"]["data"].encode('ASCII'))
     soup = BeautifulSoup(msg_html, 'lxml')
-    all_links = soup.find_all("a")
-    # hw_items = soup.find('td', {"width": "450", "align": "top"})
-    # print(hw_items)
-    # print(hw_items.contents)
-    hw_links = list(filter(lambda l: len(l.attrs) == 1, all_links))
-    hw_links = hw_links[10:]
-    for link in hw_links:
-        print(link.parent.parent.text)
+    table = soup.find('td', text="Due:").parent.parent
+    fulstrings = []
+
+    for child in table.children:
+        if type(child) != bs4.element.NavigableString:
+            for c in child.children:
+                if not c.string:
+                    continue
+                fulstrings.append(c.string)
+    for i, word in enumerate(fulstrings):
+        fulstrings[i] = format_homework(word)
+    hw = ' '.join(filter(lambda x: x, fulstrings))
+    days = ["Sun:", "Mon:", "Tue:", "Wed:", "Thu:", "Fri:", "Sat:"]
+    re_match = list(map(lambda x: re.search(x, hw), days))
+    for i, result in enumerate(re_match):
+        if i+1 < len(days):
+            hw_assigments[days[i]] = hw[result.span()[1]:re_match[i+1].span()[0]]
+        else:
+            hw_assigments[days[i]] = hw[result.span()[1]:]
+    print(hw_assigments)
+
+
+def format_homework(old_str):
+    old_str = re.sub('[ ]+', ' ', old_str)
+    new_str = ''.join(filter(lambda x: x in string.printable, old_str))
+    new_str = re.sub('[\t\n\r\f\v]+', '', new_str)
+    return new_str.strip()
 
 
 if __name__ == '__main__':
